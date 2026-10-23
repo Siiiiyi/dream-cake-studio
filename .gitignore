@@ -1,0 +1,33 @@
+node_modules/
+dist/
+.DS_Store
+test-results/
+
+# Local environment and credentials
+.env
+.env.*
+.npmrc
+.netrc
+.ssh/
+.aws/
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+id_rsa*
+id_ed25519*
+credentials*.json
+secrets*.json
+
+# Local caches, editor files, and logs
+.vite/
+coverage/
+.idea/
+.vscode/
+*.log
+*.local
+*.swp
+*.swo
+*~
