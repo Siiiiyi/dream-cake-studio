@@ -10,6 +10,8 @@ export const BRUSH_SPACING = 0.035;
 export const COAT_THICKNESS = 0.115;
 export const MAX_COAT_THICKNESS = 0.23;
 export const COAT_EMBED = 0.0008;
+export const FROST_CONTOUR = 0.04;
+export const MIN_EDGE_THICKNESS = 0.0012;
 
 const smooth = t => { const v = Math.max(0, Math.min(1, t)); return v * v * (3 - 2 * v); };
 
@@ -97,26 +99,60 @@ export function creamContribution(x, z, point) {
   return coverage * (point.amount ?? 1) * (0.98 + fold - depression);
 }
 
-export function coatingHeight(coverage, x, z, angle = 0, mass = coverage) {
+export function* spatulaPasses(strokes) {
+  for (const stroke of strokes) {
+    let points = [], distance = 0, previous = null;
+    for (const point of stroke.points) {
+      if (previous) distance += Math.hypot(point.x - previous.x, point.z - previous.z);
+      if (distance >= 0.56 && points.length) {
+        yield { ...stroke, points }; points = []; distance = 0;
+      }
+      points.push(point); previous = point;
+    }
+    if (points.length) yield { ...stroke, points };
+  }
+}
+
+export function levelCreamMass(previousMass, previousCoverage, passCoverage, passMass) {
+  if (passCoverage <= 0 || passMass <= 0) return previousMass;
+  // A loaded blade fills bare areas, then presses existing cream toward its working gap.
+  const loaded = Math.max(previousMass, passMass * (1 - previousCoverage));
+  const target = (0.98 + Math.max(-0.15, Math.min(0.15, passMass / passCoverage - 1)) * 0.04)
+    * Math.max(previousCoverage, passCoverage);
+  const pressure = 0.76 * smooth(passCoverage) * smooth(previousCoverage);
+  return Math.max(0, loaded + (target - loaded) * pressure);
+}
+
+export function levelingWork(previousCoverage, passCoverage) {
+  return smooth(previousCoverage) * smooth(passCoverage);
+}
+
+export function coatingHeight(coverage, x, z, angle = 0, mass = coverage, work = 0) {
+  if (coverage < FROST_CONTOUR - 0.005) return 0;
   const across = -x * Math.sin(angle) + z * Math.cos(angle);
   const knifeMark = 0.0025 * Math.sin(across * 10 + 0.3 * Math.sin(x * 2 + z * 3));
   const bulk = MAX_COAT_THICKNESS * (1 - Math.exp(-COAT_THICKNESS * mass / MAX_COAT_THICKNESS));
-  const body = bulk * (0.975 + 0.025 * Math.sin(x * 6 + z * 5)) + knifeMark * Math.min(1, mass);
-  return Math.min(MAX_COAT_THICKNESS, Math.max(0, body)) * smooth(coverage) * edgeFalloff(x, z);
+  const handTexture = 0.2 + 0.8 * Math.exp(-work * 0.8);
+  const body = bulk * (0.985 + 0.015 / (1 + work) * Math.sin(x * 6 + z * 5)) + knifeMark * Math.min(1, mass) * handTexture;
+  const shoulder = smooth((coverage - (FROST_CONTOUR - 0.005)) / (0.55 - (FROST_CONTOUR - 0.005)));
+  return Math.min(MAX_COAT_THICKNESS, Math.max(MIN_EDGE_THICKNESS, MIN_EDGE_THICKNESS + (body - MIN_EDGE_THICKNESS) * shoulder)) * edgeFalloff(x, z);
 }
 
 export function frostingHeight(x, z, strokes = []) {
-  let coverage = 0, angle = 0, mass = 0;
-  for (const stroke of strokes) {
-    let localMass = 0;
+  let coverage = 0, angle = 0, mass = 0, work = 0;
+  for (const stroke of spatulaPasses(strokes)) {
+    let localMass = 0, localCoverage = 0;
     for (const point of stroke.points) {
+      if ((point.amount ?? 1) <= 0) continue;
       const next = bladeCoverage(x, z, point), contribution = creamContribution(x, z, point);
-      coverage = Math.max(coverage, next);
+      localCoverage = Math.max(localCoverage, next);
       if (contribution >= localMass && contribution > 0) { localMass = contribution; angle = point.angle; }
     }
-    mass += localMass;
+    work += levelingWork(coverage, localCoverage);
+    mass = levelCreamMass(mass, coverage, localCoverage, localMass);
+    coverage = Math.max(coverage, localCoverage);
   }
-  return coatingHeight(coverage, x, z, angle, mass);
+  return coatingHeight(coverage, x, z, angle, mass, work);
 }
 
 // Arc length unfolds the real top, lip, filling seam and lower sponge into one disc.

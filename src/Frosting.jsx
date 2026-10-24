@@ -27,6 +27,6 @@ export default function Frosting({ strokes, surfaceRef }) {
   useEffect(() => () => geometry.dispose(), [geometry]);
   useEffect(() => () => grain.dispose(), [grain]);
   return <mesh ref={surfaceRef} geometry={geometry} userData={{ frostingSurface: true }} castShadow receiveShadow>
-    <meshPhysicalMaterial vertexColors roughness={0.38} metalness={0} clearcoat={0.055} clearcoatRoughness={0.5} sheen={0} specularIntensity={0.32} bumpMap={grain} bumpScale={0.0006} />
+    <meshPhysicalMaterial color="#ffffff" vertexColors transparent={false} opacity={1} depthWrite alphaTest={0} roughness={0.38} metalness={0} clearcoat={0.055} clearcoatRoughness={0.5} sheen={0} specularIntensity={0.32} bumpMap={grain} bumpScale={0.0006} />
   </mesh>;
 }

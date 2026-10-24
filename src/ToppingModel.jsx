@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { colorFruitGeometry, makeBerryGeometry, makeFruitGrain, makeStrawberryGeometry, makeStrawberryLeafGeometry, STRAWBERRY_HEIGHT, strawberrySeeds } from './fruitSurface.js';
+import { chocolateColors, STRAWBERRY_MODEL_SCALE } from './catalog.js';
+import { colorFruitGeometry, makeBerryGeometry, makeFruitGrain, makeStandingStrawberryGeometry, STRAWBERRY_SEAT_HEIGHT, strawberrySeeds } from './fruitSurface.js';
 
 function FruitSkin({ kind, color = '#ffffff' }) {
   const grain = useMemo(makeFruitGrain, []);
   useEffect(() => () => grain.dispose(), [grain]);
-  return <meshPhysicalMaterial vertexColors color={color} metalness={0} roughness={kind === 'blueberry' ? 0.88 : kind === 'cherry' ? 0.47 : kind === 'strawberry' ? 0.48 : 0.65} clearcoat={kind === 'cherry' ? 0.13 : 0.035} clearcoatRoughness={0.62} bumpMap={grain} bumpScale={kind === 'blueberry' ? 0.0025 : kind === 'strawberry' ? 0.0009 : 0.0015} />;
+  return <meshPhysicalMaterial vertexColors color={color} metalness={0} roughness={kind === 'blueberry' ? 0.88 : kind === 'cherry' ? 0.47 : kind === 'strawberry' ? 0.4 : 0.65} clearcoat={kind === 'cherry' ? 0.13 : kind === 'strawberry' ? 0.065 : 0.035} clearcoatRoughness={0.62} bumpMap={grain} bumpScale={kind === 'blueberry' ? 0.0025 : kind === 'strawberry' ? 0.0009 : 0.0015} />;
 }
 
 function useOwnedGeometry(factory) {
@@ -16,16 +17,6 @@ function useOwnedGeometry(factory) {
 
 function Ball({ position, scale = 1, color, roughness = 0.45 }) {
   return <mesh position={position} scale={scale} castShadow receiveShadow><sphereGeometry args={[1, 20, 14]} /><meshStandardMaterial color={color} roughness={roughness} /></mesh>;
-}
-
-function StrawberryLeaf({ angle }) {
-  const geometry = useOwnedGeometry(() => makeStrawberryLeafGeometry(angle));
-  return <mesh geometry={geometry} rotation-y={-angle} castShadow><meshStandardMaterial vertexColors roughness={0.78} metalness={0} side={THREE.DoubleSide} /></mesh>;
-}
-
-function Leaves() {
-  const stem = useMemo(() => new THREE.CatmullRomCurve3([new THREE.Vector3(0.006, -0.008, 0), new THREE.Vector3(0.009, 0.018, 0), new THREE.Vector3(0.02, 0.044, 0.006)]), []);
-  return <group position={[0.009, STRAWBERRY_HEIGHT - 0.001, 0]}>{Array.from({ length: 7 }, (_, i) => <StrawberryLeaf key={i} angle={i / 7 * Math.PI * 2 + 0.22 * Math.sin(i * 3)} />)}<mesh><tubeGeometry args={[stem, 10, 0.006, 6, false]} /><meshStandardMaterial color="#526d38" roughness={0.8} /></mesh></group>;
 }
 
 function StrawberrySeeds({ seeds }) {
@@ -47,8 +38,8 @@ function StrawberrySeeds({ seeds }) {
 
 function Strawberry() {
   const seeds = useMemo(strawberrySeeds, []);
-  const geometry = useOwnedGeometry(() => makeStrawberryGeometry(seeds));
-  return <group rotation-z={0.055}><mesh geometry={geometry} castShadow receiveShadow><FruitSkin kind="strawberry" /></mesh><StrawberrySeeds seeds={seeds} /><Leaves /></group>;
+  const geometry = useOwnedGeometry(() => makeStandingStrawberryGeometry(seeds));
+  return <group scale={STRAWBERRY_MODEL_SCALE}><group position-y={STRAWBERRY_SEAT_HEIGHT} rotation-x={Math.PI}><mesh geometry={geometry} castShadow receiveShadow><FruitSkin kind="strawberry" /></mesh><StrawberrySeeds seeds={seeds} /></group></group>;
 }
 
 function Blueberry() {
@@ -113,7 +104,7 @@ function Rosette({ color, small }) {
 }
 
 function Chocolate() {
-  return <group position-y={0.22} rotation={[0.08, 0.3, -0.2]}><mesh castShadow><boxGeometry args={[0.3, 0.42, 0.045]} /><meshStandardMaterial color="#513025" roughness={0.34} /></mesh>{[-1, 1].map(i => <mesh key={i} position={[i * 0.071, 0, 0.026]}><boxGeometry args={[0.125, 0.38, 0.025]} /><meshStandardMaterial color="#654030" roughness={0.4} /></mesh>)}<mesh position={[0, 0, 0.045]}><boxGeometry args={[0.3, 0.01, 0.005]} /><meshStandardMaterial color="#40271e" /></mesh></group>;
+  return <group position-y={0.22} rotation={[0.08, 0.3, -0.2]}><mesh castShadow><boxGeometry args={[0.3, 0.42, 0.045]} /><meshStandardMaterial color={chocolateColors.body} roughness={0.34} /></mesh>{[-1, 1].map(i => <mesh key={i} position={[i * 0.071, 0, 0.026]}><boxGeometry args={[0.125, 0.38, 0.025]} /><meshStandardMaterial color={chocolateColors.face} roughness={0.4} /></mesh>)}<mesh position={[0, 0, 0.045]}><boxGeometry args={[0.3, 0.01, 0.005]} /><meshStandardMaterial color={chocolateColors.groove} /></mesh></group>;
 }
 
 function Candle() {

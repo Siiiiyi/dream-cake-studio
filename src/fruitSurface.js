@@ -42,10 +42,11 @@ export function makeFruitGrain() {
   return texture;
 }
 
-export const STRAWBERRY_HEIGHT = 0.62;
+export const STRAWBERRY_HEIGHT = 0.66;
+export const STRAWBERRY_SEAT_HEIGHT = STRAWBERRY_HEIGHT * 0.96;
 
 // Interpolate squared radius: both poles form rounded caps instead of conical spikes.
-const strawberryProfile = [[0, 0], [0.04, 0.07], [0.15, 0.115], [0.3, 0.17], [0.5, 0.225], [0.65, 0.245], [0.78, 0.236], [0.9, 0.19], [0.97, 0.11], [1, 0]];
+const strawberryProfile = [[0, 0], [0.04, 0.05], [0.15, 0.098], [0.3, 0.151], [0.5, 0.205], [0.67, 0.228], [0.79, 0.222], [0.9, 0.174], [0.97, 0.094], [1, 0]];
 function strawberryRadius(t) {
   let i = 0;
   while (i < strawberryProfile.length - 2 && t > strawberryProfile[i + 1][0]) i++;
@@ -67,7 +68,7 @@ export function strawberryPoint(height, angle) {
   const t = THREE.MathUtils.clamp(height / STRAWBERRY_HEIGHT, 0, 1);
   const radius = strawberryRadius(t);
   const organic = 1 + 0.03 * Math.sin(angle * 3 + t * 4) + 0.017 * Math.cos(angle * 5 - t * 3);
-  const heart = 1 + 0.03 * Math.cos(angle * 2) * Math.sin(Math.PI * t);
+  const heart = 1 + 0.055 * Math.cos(angle * 2) * Math.sin(Math.PI * t);
   const flesh = 0.001 * Math.sin(angle * 9 + t * 18) * Math.sin(angle * 7 - t * 13) * Math.sin(Math.PI * t);
   const r = radius * organic * heart + flesh;
   const shoulders = 0.01 * Math.cos(angle * 2) * Math.sin(Math.PI * t) * t;
@@ -84,8 +85,8 @@ function strawberryNormal(h, angle) {
 
 export function strawberrySeeds() {
   const seeds = [];
-  for (let row = 0; row < 11; row++) {
-    const h = 0.043 + row * 0.049;
+  for (let row = 0; row < 13; row++) {
+    const h = STRAWBERRY_HEIGHT * (0.06 + row * 0.07);
     const r = Math.hypot(strawberryPoint(h, 0).x, strawberryPoint(h, 0).z);
     const count = Math.round(Math.PI * 2 * r / 0.083);
     for (let i = 0; i < count; i++) {
@@ -124,36 +125,15 @@ export function makeStrawberryGeometry(seeds) {
   return colorFruitGeometry(geometry, 'strawberry');
 }
 
-export function makeStrawberryLeafGeometry(angle = 0) {
-  const positions = [], colors = [], indices = [], rows = 16, cols = 6;
-  const dark = new THREE.Color('#40683b'), light = new THREE.Color('#78964a');
-  for (let row = 0; row <= rows; row++) for (let col = 0; col <= cols; col++) {
-    const t = row / rows, v = col / cols * 2 - 1;
-    const width = Math.sin(Math.PI * t) * (0.06 + 0.017 * Math.sin(angle * 4)) * (1 + 0.07 * Math.sin(t * Math.PI * 10));
-    const x = t * (0.275 + 0.04 * Math.sin(angle * 1.7)), z = v * width + 0.033 * Math.sin(t * Math.PI) * Math.sin(angle * 2), radius = Math.hypot(x, z), azimuth = angle + Math.atan2(z, x);
-    // The inner blade rests on the crown; its outer part unfolds beyond the shoulder.
-    const contactRadius = Math.min(radius, 0.17);
-    let low = STRAWBERRY_HEIGHT * 0.65, high = STRAWBERRY_HEIGHT;
-    for (let i = 0; i < 14; i++) {
-      const middle = (low + high) / 2, p = strawberryPoint(middle, azimuth);
-      const r = Math.hypot(p.x - 0.009 * (middle / STRAWBERRY_HEIGHT) ** 2, p.z);
-      if (r > contactRadius) low = middle; else high = middle;
-    }
-    const crown = strawberryPoint((low + high) / 2, azimuth).y - STRAWBERRY_HEIGHT;
-    const lift = Math.sin(Math.PI * t) * (0.012 + 0.006 * (1 - v * v) + v * 0.009 * Math.sin(angle * 2.3))
-      + (0.014 + 0.022 * Math.sin(angle * 2.7)) * t ** 4 - Math.max(0, radius - contactRadius) * 0.13;
-    positions.push(x, crown + lift, z);
-    const color = dark.clone().lerp(light, 0.3 + 0.4 * Math.abs(v) + t * 0.15);
-    colors.push(color.r, color.g, color.b);
-    if (row < rows && col < cols) {
-      const a = row * (cols + 1) + col, b = a + cols + 1;
-      indices.push(a, a + 1, b, a + 1, b + 1, b);
-    }
+export function makeStandingStrawberryGeometry(seeds) {
+  const geometry = makeStrawberryGeometry(seeds);
+  const position = geometry.attributes.position;
+  // Flatten only the former stem cap: after inversion it is a broad, closed support face.
+  for (let i = 0; i < position.count; i++) {
+    position.setY(i, Math.min(position.getY(i), STRAWBERRY_SEAT_HEIGHT));
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-  geometry.setIndex(indices); geometry.computeVertexNormals();
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
   return geometry;
 }
 

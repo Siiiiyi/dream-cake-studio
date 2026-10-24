@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import { FROST_RADIUS, FLAT_RADIUS, RIM_END, COAT_EMBED, bladeCoverage, creamContribution, coatingHeight, cakeSurface, coatedSurface } from './frosting.js';
+import { FROST_RADIUS, FLAT_RADIUS, RIM_END, COAT_EMBED, FROST_CONTOUR, bladeCoverage, creamContribution, coatingHeight, cakeSurface, coatedSurface, levelCreamMass, levelingWork, spatulaPasses } from './frosting.js';
+import { resolveFrostingColor } from './catalog.js';
+import { clipFrostingContour } from './frostingContour.js';
 
 const layouts = new Map();
 const TAU = Math.PI * 2;
@@ -36,10 +38,10 @@ function surfaceLayout(resolution) {
 
 export function makeFrostingGeometry(strokes, resolution = 161, bare = false) {
   const layout = surfaceLayout(resolution), { count, px, pz, rings, segments } = layout;
-  const coverage = new Float32Array(count), mass = new Float32Array(count), angles = new Float32Array(count), colors = new Float32Array(count * 3);
+  const coverage = new Float32Array(count), mass = new Float32Array(count), work = new Float32Array(count), angles = new Float32Array(count), colors = new Float32Array(count * 3);
   const localCoverage = new Float32Array(count), localMass = new Float32Array(count), visited = new Uint8Array(count);
-  for (const stroke of strokes) {
-    const color = new THREE.Color(stroke.color), touched = [];
+  for (const stroke of spatulaPasses(strokes)) {
+    const color = new THREE.Color(resolveFrostingColor(stroke.color)), touched = [];
     localCoverage.fill(0); localMass.fill(0); visited.fill(0);
     for (const point of stroke.points) {
       if ((point.amount ?? 1) <= 0) continue;
@@ -63,56 +65,55 @@ export function makeFrostingGeometry(strokes, resolution = 161, bare = false) {
       }
     }
     for (const index of touched) {
-      const value = localCoverage[index], blend = coverage[index] > 0 ? Math.min(1, localMass[index]) : 1;
+      const value = localCoverage[index], blend = coverage[index] > 0 ? Math.min(1, value * 1.5) : 1;
       colors[index * 3] = THREE.MathUtils.lerp(colors[index * 3], color.r, blend);
       colors[index * 3 + 1] = THREE.MathUtils.lerp(colors[index * 3 + 1], color.g, blend);
       colors[index * 3 + 2] = THREE.MathUtils.lerp(colors[index * 3 + 2], color.b, blend);
-      coverage[index] = Math.max(coverage[index], value); mass[index] += localMass[index];
+      work[index] += levelingWork(coverage[index], value);
+      mass[index] = levelCreamMass(mass[index], coverage[index], value, localMass[index]);
+      coverage[index] = Math.max(coverage[index], value);
     }
   }
-  const top = [], boundary = new Map();
-  for (let i = 0; i < layout.triangles.length; i += 3) {
-    const triangle = layout.triangles.slice(i, i + 3);
-    if (!bare && !triangle.some(index => coverage[index] > 0.002)) continue;
-    top.push(...triangle);
-    if (bare) continue;
-    const neighbor = triangle.reduce((a, b) => coverage[a] > coverage[b] ? a : b);
-    for (const index of triangle) if (!coverage[index]) colors.set(colors.subarray(neighbor * 3, neighbor * 3 + 3), index * 3);
-    for (let edge = 0; edge < 3; edge++) {
-      const a = triangle[edge], b = triangle[(edge + 1) % 3], key = `${Math.min(a, b)}:${Math.max(a, b)}`;
-      if (boundary.has(key)) boundary.delete(key); else boundary.set(key, [a, b]);
-    }
-  }
-  const vertexCount = bare ? count : count * 2;
+  const edges = [];
+  const { top, boundary, contourIndices } = bare ? { top: layout.triangles, boundary: new Map(), contourIndices: [] } : clipFrostingContour(layout, coverage, strokes, (a, b, x, z, height) => {
+    const inside = coverage[a] >= FROST_CONTOUR ? a : b;
+    edges.push({ x, z, height, color: colors.slice(inside * 3, inside * 3 + 3) });
+    return count + edges.length - 1;
+  });
+  const surfaceCount = count + edges.length, vertexCount = bare ? surfaceCount : surfaceCount * 2;
   const positions = new Float32Array(vertexCount * 3), tints = new Float32Array(vertexCount * 3), uv = new Float32Array(vertexCount * 2);
-  for (let i = 0; i < count; i++) {
-    const height = bare ? 0 : coatingHeight(coverage[i], px[i], pz[i], angles[i], mass[i]) - COAT_EMBED;
+  for (let i = 0; i < surfaceCount; i++) {
+    const edge = i >= count ? edges[i - count] : null, x = edge ? edge.x : px[i], z = edge ? edge.z : pz[i];
+    const height = bare ? 0 : (edge ? edge.height : coatingHeight(coverage[i], x, z, angles[i], mass[i], work[i])) - COAT_EMBED;
     const offset = i * 3;
-    const outer = bare ? null : coatedSurface(px[i], pz[i], height, {
+    const base = edge ? cakeSurface(x, z) : {
       x: layout.base[offset], y: layout.base[offset + 1], z: layout.base[offset + 2],
       nx: layout.normal[offset], ny: layout.normal[offset + 1], nz: layout.normal[offset + 2],
-    });
+    };
+    const outer = bare ? null : coatedSurface(x, z, height, base);
     for (let c = 0; c < 3; c++) {
       positions[i * 3 + c] = bare ? layout.base[i * 3 + c] : c === 0 ? outer.x : c === 1 ? outer.y : outer.z;
-      tints[i * 3 + c] = colors[i * 3 + c];
+      tints[i * 3 + c] = edge ? edge.color[c] : colors[i * 3 + c];
       if (!bare) {
-        positions[(i + count) * 3 + c] = layout.base[i * 3 + c] - layout.normal[i * 3 + c] * COAT_EMBED;
-        tints[(i + count) * 3 + c] = colors[i * 3 + c];
+        positions[(i + surfaceCount) * 3 + c] = c === 0 ? base.x - base.nx * COAT_EMBED : c === 1 ? base.y - base.ny * COAT_EMBED : base.z - base.nz * COAT_EMBED;
+        tints[(i + surfaceCount) * 3 + c] = tints[i * 3 + c];
       }
     }
-    uv.set(layout.uv.subarray(i * 2, i * 2 + 2), i * 2);
-    if (!bare) uv.set(layout.uv.subarray(i * 2, i * 2 + 2), (i + count) * 2);
+    uv.set([x / (FROST_RADIUS * 2) + 0.5, z / (FROST_RADIUS * 2) + 0.5], i * 2);
+    if (!bare) uv.set(uv.subarray(i * 2, i * 2 + 2), (i + surfaceCount) * 2);
   }
   const indices = [...top];
   if (!bare) {
-    for (let i = 0; i < top.length; i += 3) indices.push(top[i] + count, top[i + 2] + count, top[i + 1] + count);
-    for (const [a, b] of boundary.values()) indices.push(a, b + count, b, a, a + count, b + count);
+    for (let i = 0; i < top.length; i += 3) indices.push(top[i] + surfaceCount, top[i + 2] + surfaceCount, top[i + 1] + surfaceCount);
+    for (const [a, b] of boundary.values()) indices.push(a, b + surfaceCount, b, a, a + surfaceCount, b + surfaceCount);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   geometry.setAttribute('color', new THREE.BufferAttribute(tints, 3));
   geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   geometry.setIndex(indices); geometry.computeVertexNormals(); geometry.computeBoundingSphere();
-  geometry.userData.surfaceVertexCount = count;
+  geometry.userData.surfaceVertexCount = surfaceCount;
+  geometry.userData.gridVertexCount = count;
+  geometry.userData.contourIndices = contourIndices;
   return geometry;
 }

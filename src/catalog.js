@@ -1,3 +1,6 @@
+export const chocolateColors = { body: '#513025', face: '#654030', groove: '#40271e' };
+export const STRAWBERRY_MODEL_SCALE = 0.78;
+
 export const bases = [
   { id: 'vanilla', name: '香草蛋糕', en: 'Vanilla chiffon', color: '#dcb980', note: '柔软轻盈，藏着淡淡香草气息' },
   { id: 'chocolate', name: '巧克力蛋糕', en: 'Chocolate sponge', color: '#704331', note: '醇厚可可，给甜蜜一点深度' },
@@ -5,11 +8,17 @@ export const bases = [
 ];
 export const frostings = [
   { id: 'cream', name: '原味奶油', en: 'Fresh cream', color: '#fff2dc', note: '细腻绵密，最纯粹的奶香' },
-  { id: 'strawberry', name: '草莓奶油', en: 'Strawberry cream', color: '#efbbbe', note: '一抹粉色，轻盈的莓果香' },
-  { id: 'cocoa', name: '巧克力奶油', en: 'Chocolate cream', color: '#92634f', note: '丝滑浓郁，融化在每一口' },
+  { id: 'strawberry', name: '草莓奶油', en: 'Strawberry cream', color: '#e99ba0', note: '一抹粉色，轻盈的莓果香' },
+  { id: 'cocoa', name: '巧克力奶油', en: 'Chocolate cream', color: chocolateColors.face, note: '醇厚可可，绵密柔滑的奶油霜' },
 ];
+
+export function resolveFrostingColor(color) {
+  if (color === '#743c26' || color === '#92634f') return chocolateColors.face;
+  if (color === '#efbbbe') return frostings[1].color;
+  return color;
+}
 export const fruits = [
-  { id: 'strawberry', name: '草莓', en: 'Strawberry', color: '#cd4e47', radius: 0.26 },
+  { id: 'strawberry', name: '草莓', en: 'Strawberry', color: '#cd4e47', radius: 0.26 * STRAWBERRY_MODEL_SCALE },
   { id: 'blueberry', name: '蓝莓', en: 'Blueberry', color: '#586284', radius: 0.17 },
   { id: 'cherry', name: '樱桃', en: 'Cherry', color: '#a63c3c', radius: 0.23 },
   { id: 'raspberry', name: '覆盆子', en: 'Raspberry', color: '#c55d6a', radius: 0.21 },
